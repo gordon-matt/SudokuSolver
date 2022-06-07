@@ -57,7 +57,7 @@
         {
             foreach (var cell in this.OrderBy(x => x.Row).ThenBy(x => x.Column))
             {
-                Console.Write($"{cell.Value},");
+                Console.Write($"{cell.Value ?? 0} | ");
 
                 if (cell.Column == 8)
                 {
@@ -68,53 +68,44 @@
             Console.WriteLine();
         }
 
-        public void Solve()
+        public bool Solve()
         {
-            // Get all cells, grouped by row (as we want to iterate each row)
-            var cellsByRow = this.GroupBy(x => x.Row);
-            foreach (var row in cellsByRow)
+            // Get an empty cell
+            var cell = GetEmptyCell();
+            if (cell == null)
             {
-                // for each cell in row...
-                for (int i = 0; i < 9; i++)
-                {
-                    var cell = row.ElementAt(i);
-                    if (cell.IsReadOnly) // Already has a value..
-                    {
-                        continue;
-                    }
-
-                    do
-                    {
-                        FillCellValue(cell);
-
-                        // If a valid number was not found for this cell, then it means we need to go back and try a different number
-                        //  for one of the other cells..
-                        if (!cell.Value.HasValue && i > 0) // we're going to do (i - 1), so make sure we're not at first cell in row.
-                        {
-                            Cell prevCell = null;
-                            do
-                            {
-                                // backtrack...
-                                for (int j = i - 1; j > 0; j--)
-                                {
-                                    prevCell = row.ElementAt(j);
-                                    if (!prevCell.IsReadOnly)
-                                    {
-                                        prevCell.AttemptedValues.Add(prevCell.Value!.Value);
-                                        prevCell.Value = null;
-                                        FillCellValue(prevCell);
-
-                                        if (prevCell.Value.HasValue)
-                                        {
-                                            break;
-                                        }
-                                    }
-                                }
-                            } while (!prevCell.Value.HasValue);
-                        }
-                    } while (!cell.Value.HasValue);
-                }
+                return true;
             }
+
+            // Fill it with a possible value
+            FillCellValue(cell);
+
+            // If there is a value, let's use recursion to find another empty block and continue..
+            if (cell.Value.HasValue)
+            {
+                return Solve();
+            }
+
+            Console.WriteLine($"Value not found for ({cell.Row},{cell.Column})…");
+
+            // We need to go back and try a different number for one of the previously filled cells..
+            do
+            {
+                // backtrack...
+                cell.AttemptedValues.Clear();
+                cell = GetPreviousCell(cell);
+                cell.AttemptedValues.Add(cell.Value.Value);
+                cell.Value = null;
+                FillCellValue(cell);
+            } while (!cell.Value.HasValue);
+
+            // If there is a value, let's use recursion to find another empty block and continue..
+            if (cell.Value.HasValue)
+            {
+                return Solve();
+            }
+
+            return false;
         }
 
         private void FillCellValue(Cell cell)
@@ -130,12 +121,44 @@
                     // If the cell has no value AND the "num" hasn't been tried before already..
                     if (!cell.Value.HasValue && !cell.AttemptedValues.Contains(num))
                     {
+                        Console.WriteLine($"Attempting value {num} for ({cell.Row},{cell.Column})…");
                         //... let's try it..
                         cell.Value = num;
                         break;
                     }
                 }
             }
+        }
+
+        private Cell GetEmptyCell()
+        {
+            return this
+                .OrderBy(x => x.Row) // Order by row, then column.. so that we solve the board left-to-right, top-to-bottom
+                .ThenBy(x => x.Column)
+                .FirstOrDefault(x => !x.Value.HasValue);
+        }
+
+        private Cell GetPreviousCell(Cell cell)
+        {
+            // First try to get previous cell in same row
+            var result = this
+                .Where(x => x.Row == cell.Row && x.Column < cell.Column && !x.IsReadOnly)
+                .OrderByDescending(x => x.Column)
+                .FirstOrDefault();
+
+            if (result != null)
+            {
+                return result;
+            }
+
+            // Then try last cell in previous row
+            byte col = this.Where(x => x.Row == cell.Row - 1 && !x.IsReadOnly).Max(x => x.Column);
+
+            result = this
+                .Where(x => x.Row == cell.Row - 1 && x.Column == col)
+                .FirstOrDefault();
+
+            return result;
         }
 
         private bool ValueExistsInRow(byte row, byte val)
