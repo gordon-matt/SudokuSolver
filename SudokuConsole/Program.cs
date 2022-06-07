@@ -1,31 +1,44 @@
-﻿namespace SudokuConsole
+﻿using Extenso;
+using Extenso.Collections;
+
+namespace SudokuConsole
 {
     internal class Program
     {
         private static void Main(string[] args)
         {
-            var data = new byte?[,]
-            {
-                { null, null, 3, 2, null, null, null, null, null },
-                { null, 7, 4, null, null, null, 5, 3, null },
-                { null, 6, null, null, 7, null, 9, null, 1 },
-                { 6, null, 7, null, 5, 3, 8, 4, 9 },
-                { 1, null, 8, 9, 2, 7, 3, 6, null },
-                { 5, null, 9, 4, null, null, null, null, null },
-                { null, 9, null, null, null, null, null, 1, null },
-                { null, null, 6, null, 3, 1, null, null, null },
-                { null, null, null, 6, null, 2, 4, null, 3 }
-            };
+            // Load data from file to byte[,]
+            var data = new byte?[9,9];
 
+            var fileContent = File.ReadAllText(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "data.csv"));
+            var rows = fileContent.ToLines().ToArray();
+
+            for (int row = 0; row < 9; row++)
+            {
+                var values = rows[row].Split(',').ToListOf<byte>();
+                for (int col = 0; col < 9; col++)
+                {
+                    byte val = values[col];
+                    data[row, col] = val == 0 ? null : val;
+                }
+            }
+
+            // Create Board with loaded data
             var board = new Board(data);
 
             Console.WriteLine("BEFORE Solve():");
             board.Display();
 
-            board.Solve();
-
-            Console.WriteLine("AFTER Solve():");
-            board.Display();
+            bool solved = board.Solve();
+            if (!solved)
+            {
+                Console.WriteLine("This board is not valid. It cannot be solved.");
+            }
+            else
+            {
+                Console.WriteLine("AFTER Solve():");
+                board.Display();
+            }
 
             Console.ReadLine();
         }
@@ -36,8 +49,10 @@
     {
         public Board(byte?[,] data)
         {
+            // Iterate first dimension (rows)
             for (byte x = 0; x < data.GetLength(0); x += 1)
             {
+                // Iterate second dimension (cols)
                 for (byte y = 0; y < data.GetLength(1); y += 1)
                 {
                     byte? value = data[x, y];
@@ -86,7 +101,7 @@
                 return Solve();
             }
 
-            Console.WriteLine($"Value not found for ({cell.Row},{cell.Column})…");
+            //Console.WriteLine($"Value not found for ({cell.Row},{cell.Column})…");
 
             // We need to go back and try a different number for one of the previously filled cells..
             do
@@ -94,6 +109,12 @@
                 // backtrack...
                 cell.AttemptedValues.Clear();
                 cell = GetPreviousCell(cell);
+
+                if (cell == null)
+                {
+                    return false;
+                }
+
                 cell.AttemptedValues.Add(cell.Value.Value);
                 cell.Value = null;
                 FillCellValue(cell);
@@ -121,7 +142,7 @@
                     // If the cell has no value AND the "num" hasn't been tried before already..
                     if (!cell.Value.HasValue && !cell.AttemptedValues.Contains(num))
                     {
-                        Console.WriteLine($"Attempting value {num} for ({cell.Row},{cell.Column})…");
+                        //Console.WriteLine($"Attempting value {num} for ({cell.Row},{cell.Column})…");
                         //... let's try it..
                         cell.Value = num;
                         break;
@@ -152,7 +173,13 @@
             }
 
             // Then try last cell in previous row
-            byte col = this.Where(x => x.Row == cell.Row - 1 && !x.IsReadOnly).Max(x => x.Column);
+            var cells = this.Where(x => x.Row == cell.Row - 1 && !x.IsReadOnly);
+            if (!cells.Any())
+            {
+                return null;
+            }
+
+            byte col = cells.Max(x => x.Column);
 
             result = this
                 .Where(x => x.Row == cell.Row - 1 && x.Column == col)
